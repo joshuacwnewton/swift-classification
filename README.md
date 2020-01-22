@@ -22,4 +22,4 @@ This approach is undergoing active development. Preliminary proposed methods inc
 
 ### Further Reading
 
-A presentation slide deck has been created, which provides greater detail into the problem domain and available datasets. The slide deck can be viewed using this link: [Chimney Swift Classification Overview.pdf](assets/Chimney Swift Classification Overview.pdf)
+A presentation slide deck has been created, which provides greater detail into the problem domain and available datasets. The slide deck can be viewed using this link: [Chimney Swift Classification Overview](assets/Chimney-Swift-Classification-Overview.pdf)
