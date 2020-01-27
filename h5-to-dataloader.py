@@ -1,10 +1,11 @@
 import h5py
 # import helpers
-# import numpy as np
+import numpy as np
 from pathlib import Path
 import torch
 from torch.utils import data
-
+import cv2
+from skimage import transform
 
 class HDF5Dataset(data.Dataset):
     """Represents an abstract HDF5 dataset.
@@ -43,8 +44,11 @@ class HDF5Dataset(data.Dataset):
     def __getitem__(self, index):
         # get data
         x = self.get_data("data", index)
-        if self.transform:
-            x = self.transform(x)
+        if isinstance(self.transform, list):
+            for transform in self.transform:
+                x = transform(x)
+        elif self.transform:
+            raise RuntimeError('Transform names must be provided by list.')
         else:
             x = torch.from_numpy(x)
 
@@ -137,12 +141,54 @@ class HDF5Dataset(data.Dataset):
         return self.data_cache[fp][cache_idx]
 
 
+class Decode(object):
+    """Decode per-item byte arrays to recover image matrices.
+
+    Args:
+        -color_type (int): Flag specifying the color type of a
+        loaded image. See OpenCV docs for specific flag options:
+
+        (https://docs.opencv.org/2.4/modules/highgui/doc/
+        reading_and_writing_images_and_video.html#imread)
+    """
+
+    def __init__(self, flags):
+        self.flags = flags
+
+    def __call__(self, sample_set):
+        return [cv2.imdecode(buf, flags=self.flags) for buf in sample_set]
+
+
+class Resize(object):
+    """Rescale the image in a sample to a given size.
+
+    Args:
+        output_size (tuple or int): Desired output size. If tuple, output is
+            matched to output_size. If int, smaller of image edges is matched
+            to output_size keeping aspect ratio the same.
+    """
+
+    def __init__(self, output_size):
+        assert isinstance(output_size, int)
+        self.dim = (output_size, output_size)
+
+    def __call__(self, sample_set):
+        output_set = []
+
+        for image in sample_set:
+            output_set.append(transform.resize(image, self.dim))
+
+        return np.array(output_set)
+
+
 if __name__ == "__main__":
     num_epochs = 50
     loader_params = {'batch_size': 100, 'shuffle': True, 'num_workers': 6}
 
+    decoder = Decode(flags=cv2.IMREAD_COLOR)
+    resizer = Resize(output_size=24)
     dataset = HDF5Dataset('data/', recursive=True, load_data=False,
-                          data_cache_size=4, transform=None)
+                          data_cache_size=4, transform=[decoder, resizer])
 
     data_loader = data.DataLoader(dataset, **loader_params)
 
