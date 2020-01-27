@@ -103,10 +103,8 @@ def store_set(h5_fptr, data, labels, name):
 
     # Create group and store data/labels
     grp = h5_fptr.create_group(f'{name}_set')
-    data = grp.create_dataset(f"{name}_data", (len(data),),
-                              dtype=dt_int, data=data)
-    labels = grp.create_dataset(f"{name}_label",
-                                data=np.array(labels, dtype=dt_str))
+    grp.create_dataset("data", (len(data),), dtype=dt_int, data=data)
+    grp.create_dataset("label", data=np.array(labels, dtype=dt_str))
 
 
 ###############################################################################
