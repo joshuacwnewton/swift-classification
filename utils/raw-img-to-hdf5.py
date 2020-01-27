@@ -29,7 +29,7 @@ from datetime import datetime
 
 
 def main(args):
-    X, y = load_images(args.input, encoding=".png")
+    X, y, class_names = load_images(args.input, encoding=".png")
 
     X_train, X_val, X_test, y_train, y_val, y_test \
         = split_dataset(X, y, train_size=args.split[0],
@@ -40,9 +40,9 @@ def main(args):
     f = h5py.File(f"{os.path.dirname(args.input)}/"
                   f"{datetime.now()}_{len(X)}.h5", "w")
 
-    store_set(f, X_train, y_train, "training")
-    store_set(f, X_val, y_val, "validation")
-    store_set(f, X_test, y_test, "testing")
+    store_set(f, "training", X_train, y_train, classes=class_names)
+    store_set(f, "validation", X_val, y_val, classes=class_names)
+    store_set(f, "testing", X_test, y_test, classes=class_names)
 
     f.close()
 
@@ -60,8 +60,10 @@ def load_images(root_dir, encoding=".png"):
     images = [cv2.imencode(encoding, i)[1] for i in images]
 
     labels = [m.group(1) for m in matches if m is not None]
+    class_names = list(set(labels))
+    labels = [class_names.index(label) for label in labels]
 
-    return images, labels
+    return images, labels, class_names
 
 
 def split_dataset(X, y, train_size, val_size, test_size):
@@ -92,7 +94,7 @@ def split_dataset(X, y, train_size, val_size, test_size):
     return X_train, X_val, X_test, y_train, y_val, y_test
 
 
-def store_set(h5_fptr, data, labels, name):
+def store_set(h5_fptr, name, data, labels, classes):
     """Stores paired data and labels into passed h5 file pointer."""
 
     assert len(data) == len(labels)
@@ -104,7 +106,11 @@ def store_set(h5_fptr, data, labels, name):
     # Create group and store data/labels
     grp = h5_fptr.create_group(f'{name}_set')
     grp.create_dataset("data", (len(data),), dtype=dt_int, data=data)
-    grp.create_dataset("label", data=np.array(labels, dtype=dt_str))
+    grp.create_dataset("label", data=np.array(labels, dtype=int))
+
+    # Store class names as group attribute
+    grp.attrs.create("class_names", data=np.array(classes, dtype=dt_str))
+
 
 
 ###############################################################################
