@@ -1,6 +1,8 @@
 # import helpers
 import torch
 from torch.utils import data
+from torch.utils.data.sampler import SubsetRandomSampler
+
 import cv2
 import numpy as np
 
@@ -8,12 +10,14 @@ from glob import glob
 import h5py
 
 from transforms import Decode, Resize
+import copy
 
 
 def main(training_path, testing_path):
     # TODO: Split config off into separate functions
+    num_folds = 5
     num_epochs = 50
-    loader_params = {'batch_size': 100, 'shuffle': True, 'num_workers': 6}
+    loader_params = {'batch_size': 100, 'num_workers': 6}
 
     # Transforms to be applied across datasets
     decoder = Decode(flags=cv2.IMREAD_COLOR)
@@ -21,16 +25,47 @@ def main(training_path, testing_path):
 
     # Create and load datasets from .h5 files using custom dataset class
     train_set = HDF5Dataset(training_path, transform=[decoder, resizer])
+
+    # Use generator function to iterate through cross-validation splits
+    for train_loader, val_loader in n_fold_cross_val(train_set, num_folds,
+                                                     loader_params):
+        for i_epoch in range(num_epochs):
+            for x_batch, y_batch in train_loader:
+                pass
+
+            x_val, y_val = next(iter(val_loader))
+
     test_set = HDF5Dataset(testing_path, transform=[decoder, resizer])
-    train_loader = data.DataLoader(train_set, **loader_params)
-    test_loader = data.DataLoader(test_set, **loader_params)
+    test_loader = data.DataLoader(test_set, shuffle=True, **loader_params)
 
-    for i in range(num_epochs):
-        for x, y in train_loader:
-            # here comes your training loop
-            pass
 
-            test = None
+def n_fold_cross_val(dataset, num_folds, loader_params):
+    """Generator function that returns training and validation DataLoaders.
+    Each time the generator is called, a different fold will be designated
+    as the validation fold."""
+
+    # Create folds containing shuffled indices
+    all_folds = np.array(
+        np.array_split(np.random.permutation(len(dataset)), num_folds)
+    )
+
+    # Create copy of loader params so "batch_size" can be overridden for val
+    val_loader_params = copy.deepcopy(loader_params)
+
+    for i_fold, fold in enumerate(all_folds):
+        # Use current fold for validation loader
+        val_loader_params["batch_size"] = len(fold)
+        val_loader = data.DataLoader(dataset, **val_loader_params,
+                                     sampler=SubsetRandomSampler(fold))
+
+        # Use all folds BUT current fold for training loader
+        other_folds = np.concatenate(
+            all_folds[np.delete(np.arange(num_folds), i_fold)]
+        )
+        train_loader = data.DataLoader(dataset, **loader_params,
+                                       sampler=SubsetRandomSampler(other_folds))
+
+        yield train_loader, val_loader
 
 
 ###############################################################################
