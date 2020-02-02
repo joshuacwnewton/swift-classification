@@ -1,6 +1,5 @@
 import cv2
 from skimage import transform
-import numpy as np
 
 
 class Decode(object):
@@ -17,8 +16,8 @@ class Decode(object):
     def __init__(self, flags):
         self.flags = flags
 
-    def __call__(self, sample_set):
-        return [cv2.imdecode(buf, flags=self.flags) for buf in sample_set]
+    def __call__(self, bytestream):
+        return cv2.imdecode(bytestream, flags=self.flags)
 
 
 class Resize(object):
@@ -34,10 +33,5 @@ class Resize(object):
         assert isinstance(output_size, int)
         self.dim = (output_size, output_size)
 
-    def __call__(self, sample_set):
-        output_set = []
-
-        for image in sample_set:
-            output_set.append(transform.resize(image, self.dim))
-
-        return np.array(output_set)
+    def __call__(self, img):
+        return transform.resize(img, self.dim)
