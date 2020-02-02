@@ -93,12 +93,11 @@ def export_set(output_dir, name, data, labels, classes):
     f = h5py.File(f"{output_dir}/{name}_{len(data)}.h5", "w")
 
     # Create group and store data/labels
-    grp = f.create_group(f'{name}_set')
-    grp.create_dataset("data", (len(data),), dtype=dt_int, data=data)
-    grp.create_dataset("label", data=np.array(labels, dtype=int))
+    x = f.create_dataset("data", (len(data),), dtype=dt_int, data=data)
+    y = f.create_dataset("label", data=np.array(labels, dtype=int))
 
     # Store <mapping from (0, 1 ...) to class names> as group attribute
-    grp.attrs.create("class_names", data=np.array(classes, dtype=dt_str))
+    y.attrs.create("class_names", data=np.array(classes, dtype=dt_str))
 
     f.close()
 
