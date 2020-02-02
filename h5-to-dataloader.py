@@ -1,10 +1,8 @@
 # import helpers
-import numpy as np
-from pathlib import Path
 import torch
 from torch.utils import data
 import cv2
-from skimage import transform
+
 from glob import glob
 import h5py
 
@@ -19,15 +17,21 @@ def main(training_path, testing_path):
     # Transforms to be applied across datasets
     decoder = Decode(flags=cv2.IMREAD_COLOR)
     resizer = Resize(output_size=24)
-    dataset = HDF5Dataset('data/', recursive=True, load_data=False,
-                          data_cache_size=4, transform=[decoder, resizer])
 
-    data_loader = data.DataLoader(dataset, **loader_params)
+    train_set = HDF5Dataset(file_paths=training_path, load_data=False,
+                            data_cache_size=4, transform=[decoder, resizer])
+    train_loader = data.DataLoader(train_set, **loader_params)
+
+    test_set = HDF5Dataset(file_paths=training_path, load_data=False,
+                           data_cache_size=4, transform=[decoder, resizer])
+    test_loader = data.DataLoader(test_set, **loader_params)
 
     for i in range(num_epochs):
-        for x, y in data_loader:
+        for x, y in train_loader:
             # here comes your training loop
             pass
+
+            test = None
 
 
 ###############################################################################
@@ -48,7 +52,7 @@ class HDF5Dataset(data.Dataset):
         transform: PyTorch transform to apply to every data instance (default=None).
     """
 
-    def __init__(self, file_path, recursive, load_data, data_cache_size=3,
+    def __init__(self, file_paths, load_data, data_cache_size=3,
                  transform=None):
         super().__init__()
         self.data_info = []
@@ -56,18 +60,8 @@ class HDF5Dataset(data.Dataset):
         self.data_cache_size = data_cache_size
         self.transform = transform
 
-        # Search for all h5 files
-        p = Path(file_path)
-        assert (p.is_dir())
-        if recursive:
-            files = sorted(p.glob('**/*.h5'))
-        else:
-            files = sorted(p.glob('*.h5'))
-        if len(files) < 1:
-            raise RuntimeError('No hdf5 datasets found')
-
-        for h5dataset_fp in files:
-            self._add_data_infos(str(h5dataset_fp.resolve()), load_data)
+        for h5dataset_fp in file_paths:
+            self._add_data_infos(h5dataset_fp, load_data)
 
     def __getitem__(self, index):
         # get data
@@ -75,6 +69,7 @@ class HDF5Dataset(data.Dataset):
         if isinstance(self.transform, list):
             for transform in self.transform:
                 x = transform(x)
+            x = torch.from_numpy(x)
         elif self.transform:
             raise RuntimeError('Transform names must be provided by list.')
         else:
@@ -83,6 +78,7 @@ class HDF5Dataset(data.Dataset):
         # get label
         y = self.get_data("label", index)
         y = torch.from_numpy(y)
+
         return (x, y)
 
     def __len__(self):
