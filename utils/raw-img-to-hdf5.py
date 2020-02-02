@@ -35,15 +35,12 @@ def main(args):
                                                      train_size=args.split[0],
                                                      test_size=args.split[1])
 
-    # Initialize hdf5 file pointer
-    f = h5py.File(f"{os.path.dirname(args.input)}/"
-                  f"{datetime.now()}_{len(X)}.h5", "w")
+    # Create unique directory based on time so .h5 files not overwritten
+    output_dir = f"{os.path.dirname(args.input)}/{datetime.now()}"
+    os.mkdir(output_dir)
 
-    store_set(f, "training", X_train, y_train, classes=class_names)
-    store_set(f, "validation", X_val, y_val, classes=class_names)
-    store_set(f, "testing", X_test, y_test, classes=class_names)
-
-    f.close()
+    export_set(output_dir, "training", X_train, y_train, classes=class_names)
+    export_set(output_dir, "testing", X_test, y_test, classes=class_names)
 
 
 def load_images(root_dir, encoding=".png"):
@@ -83,7 +80,7 @@ def split_dataset(X, y, train_size, test_size):
     return X_train, X_test, y_train, y_test
 
 
-def store_set(h5_fptr, name, data, labels, classes):
+def export_set(output_dir, name, data, labels, classes):
     """Stores paired data and labels into passed h5 file pointer."""
 
     assert len(data) == len(labels)
@@ -92,14 +89,18 @@ def store_set(h5_fptr, name, data, labels, classes):
     dt_int = h5py.vlen_dtype(np.dtype('uint8'))
     dt_str = h5py.string_dtype(encoding='utf-8')
 
+    # Initialize hdf5 file pointer
+    f = h5py.File(f"{output_dir}/{name}_{len(data)}.h5", "w")
+
     # Create group and store data/labels
-    grp = h5_fptr.create_group(f'{name}_set')
+    grp = f.create_group(f'{name}_set')
     grp.create_dataset("data", (len(data),), dtype=dt_int, data=data)
     grp.create_dataset("label", data=np.array(labels, dtype=int))
 
-    # Store class names as group attribute
+    # Store <mapping from (0, 1 ...) to class names> as group attribute
     grp.attrs.create("class_names", data=np.array(classes, dtype=dt_str))
 
+    f.close()
 
 
 ###############################################################################
