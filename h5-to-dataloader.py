@@ -6,6 +6,31 @@ import torch
 from torch.utils import data
 import cv2
 from skimage import transform
+from glob import glob
+
+
+def main(training_path, testing_path):
+    # TODO: Split config off into separate functions
+    num_epochs = 50
+    loader_params = {'batch_size': 100, 'shuffle': True, 'num_workers': 6}
+
+    decoder = Decode(flags=cv2.IMREAD_COLOR)
+    resizer = Resize(output_size=24)
+    dataset = HDF5Dataset('data/', recursive=True, load_data=False,
+                          data_cache_size=4, transform=[decoder, resizer])
+
+    data_loader = data.DataLoader(dataset, **loader_params)
+
+    for i in range(num_epochs):
+        for x, y in data_loader:
+            # here comes your training loop
+            pass
+
+
+###############################################################################
+#              ABOVE: TRAINING/TESTING | BELOW: DATASET CLASS                 #
+###############################################################################
+
 
 class HDF5Dataset(data.Dataset):
     """Represents an abstract HDF5 dataset.
@@ -141,6 +166,11 @@ class HDF5Dataset(data.Dataset):
         return self.data_cache[fp][cache_idx]
 
 
+###############################################################################
+#             ABOVE: DATASET CLASS | BELOW: DATASET TRANSFORMS                #
+###############################################################################
+
+
 class Decode(object):
     """Decode per-item byte arrays to recover image matrices.
 
@@ -181,18 +211,34 @@ class Resize(object):
         return np.array(output_set)
 
 
+###############################################################################
+#              ABOVE: DATASET TRANSFORMS | BELOW: ARG PARSING                 #
+###############################################################################
+
+
+def find_files(directory, name, ext, recursive=False):
+
+    if recursive:
+        files = sorted(glob(f'{directory}/**/*{name}*.{ext}'))
+    else:
+        files = sorted(glob(f'{directory}/*{name}*.{ext}'))
+
+    if len(files) < 1:
+        raise RuntimeError('No hdf5 datasets found')
+
+    return files
+
+
 if __name__ == "__main__":
-    num_epochs = 50
-    loader_params = {'batch_size': 100, 'shuffle': True, 'num_workers': 6}
+    # TODO: Use proper argparsing once functionality in place
+    data_dir = "data/current_*"
 
-    decoder = Decode(flags=cv2.IMREAD_COLOR)
-    resizer = Resize(output_size=24)
-    dataset = HDF5Dataset('data/', recursive=True, load_data=False,
-                          data_cache_size=4, transform=[decoder, resizer])
+    h5_train = find_files(data_dir, "train", "h5")
+    h5_test = find_files(data_dir, "test", "h5")
 
-    data_loader = data.DataLoader(dataset, **loader_params)
+    main(h5_train, h5_test)
 
-    for i in range(num_epochs):
-        for x, y in data_loader:
-            # here comes your training loop
-            pass
+
+
+
+
