@@ -52,23 +52,23 @@ class HDF5Dataset(data.Dataset):
         self.file_path = file_path
         self.transform = transform
 
-        with h5py.File(self.file_path, "r") as h5_file:
-            required_datasets = ["data", "label"]
+        required_datasets = ["data", "label"]
+        with h5py.File(self.file_path, "r") as h5_file_ptr:
             for ds in required_datasets:
-                if ds not in h5_file.keys():
+                if ds not in h5_file_ptr.keys():
                     raise RuntimeError(f'File missing required "{ds}" dataset')
 
     def __len__(self):
-        with h5py.File(self.file_path, "r") as h5_file:
-            return h5_file["data"][()].shape[0]
+        with h5py.File(self.file_path, "r") as h5_file_ptr:
+            return h5_file_ptr["data"][()].shape[0]
 
     def __getitem__(self, index):
         if torch.is_tensor(index):
             index = index.tolist()
 
-        with h5py.File(self.file_path, "r") as h5_file:
-            x = np.array(h5_file["data"][index])
-            y = np.array(h5_file["label"][index])
+        with h5py.File(self.file_path, "r") as h5_file_ptr:
+            x = np.array(h5_file_ptr["data"][index])
+            y = np.array(h5_file_ptr["label"][index])
 
         if isinstance(self.transform, list):
             for transform in self.transform:
