@@ -31,10 +31,9 @@ from datetime import datetime
 def main(args):
     X, y, class_names = load_images(args.input, encoding=".png")
 
-    X_train, X_val, X_test, y_train, y_val, y_test \
-        = split_dataset(X, y, train_size=args.split[0],
-                        val_size=args.split[1],
-                        test_size=args.split[2])
+    X_train, X_test, y_train, y_test = split_dataset(X, y,
+                                                     train_size=args.split[0],
+                                                     test_size=args.split[1])
 
     # Initialize hdf5 file pointer
     f = h5py.File(f"{os.path.dirname(args.input)}/"
@@ -66,32 +65,22 @@ def load_images(root_dir, encoding=".png"):
     return images, labels, class_names
 
 
-def split_dataset(X, y, train_size, val_size, test_size):
+def split_dataset(X, y, train_size, test_size):
     """Split overall dataset into stratified train/val/test sets based
     on provided percentage splits."""
 
-    assert sum([train_size, val_size, test_size]) == 1.0
+    assert sum([train_size, test_size]) == 1.0
 
     # Split dataset into "validation set" and "the rest"
-    X_rest, X_val, y_rest, y_val = train_test_split(X, y,
-                                                    test_size=val_size,
-                                                    train_size=(1 - val_size),
-                                                    stratify=y)
-
-    # Test size should be adjusted to be fraction of "the rest" subset
-    test_count = round(test_size * len(X))
-    test_size = test_count / len(X_rest)
-
-    # Split "the rest" into "test set" and "training set"
-    X_train, X_test, y_train, y_test = train_test_split(X_rest, y_rest,
+    X_train, X_test, y_train, y_test = train_test_split(X, y,
                                                         test_size=test_size,
-                                                        train_size=(1-test_size),
-                                                        stratify=y_rest)
+                                                        train_size=train_size,
+                                                        stratify=y)
 
-    assert len(X) == len(X_train) + len(X_val) + len(X_test)
-    assert len(y) == len(y_train) + len(y_val) + len(y_test)
+    assert len(X) == len(X_train) + len(X_test)
+    assert len(y) == len(y_train) + len(y_test)
 
-    return X_train, X_val, X_test, y_train, y_val, y_test
+    return X_train, X_test, y_train, y_test
 
 
 def store_set(h5_fptr, name, data, labels, classes):
@@ -141,7 +130,7 @@ class SplitAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         values = [float(value) for value in values]
         if sum(values) != 1.0:
-            raise ValueError("Train/Val/Test percentages do not sum to 1.")
+            raise ValueError("Train/Val and Test percentages do not sum to 1.")
         setattr(namespace, self.dest, values)
 
 
@@ -152,8 +141,8 @@ def parse_args(args=sys.argv[1:]):
                         help='Path to root directory containing image classes',
                         action=DirectoryAction)
     parser.add_argument('--split',
-                        help="Percentage split between train/val/test",
-                        nargs=3,
+                        help="Percentage split between train+val and test",
+                        nargs=2,
                         action=SplitAction)
 
     return parser.parse_args(args)
