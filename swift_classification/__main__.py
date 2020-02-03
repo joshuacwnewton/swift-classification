@@ -11,8 +11,20 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description='Configuration loader for classifiers'
     )
-    subparsers = parser.add_subparsers(help='sub-command help')
 
+    transform_params = parser.add_argument_group("Dataset Transform Params")
+    transform_params.add_argument(
+        '--imread_mode',
+        default=1,  # 1 == cv2.IMREAD_COLOR
+        help='Number of subprocesses to use for data loading',
+    )
+    transform_params.add_argument(
+        '--resize_dim',
+        default=(24, 24),
+        help='Size of image after resizing',
+    )
+
+    subparsers = parser.add_subparsers(help='sub-command help')
     add_cnn_subparser(subparsers)
     add_linear_subparser(subparsers)
 
@@ -47,18 +59,6 @@ def add_cnn_subparser(subparsers):
         '--num_epochs',
         default=100,
         help='Number of epochs to train classifier over'
-    )
-
-    transform_params = parser.add_argument_group("Dataset Transform Params")
-    transform_params.add_argument(
-        '--imread_mode',
-        default=1,  # 1 == cv2.IMREAD_COLOR
-        help='Number of subprocesses to use for data loading',
-    )
-    transform_params.add_argument(
-        '--resize_dim',
-        default=(24, 24),
-        help='Size of image after resizing',
     )
 
     loader_params = parser.add_argument_group("DataLoader Parameters")
