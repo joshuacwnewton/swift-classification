@@ -5,9 +5,10 @@ from glob import glob
 import argparse
 import sys
 from pathlib import Path
+from torch.utils.data import DataLoader
 
 
-def parse_args(args=sys.argv[1:]):
+def parse_args():
     parser = argparse.ArgumentParser(
         description='Configuration loader for classifiers'
     )
@@ -16,7 +17,10 @@ def parse_args(args=sys.argv[1:]):
     add_cnn_subparser(subparsers)
     add_linear_subparser(subparsers)
 
-    return parser.parse_args(args)
+    parsed_args = parser.parse_args()
+    parsed_args = pack_loader_params(parsed_args)
+
+    return parsed_args
 
 
 def add_cnn_subparser(subparsers):
@@ -44,15 +48,17 @@ def add_cnn_subparser(subparsers):
         default=100,
         help='Number of epochs to train classifier over'
     )
+
+    parser.add_argument_group("DataLoader Parameters")
     parser.add_argument(
         '--batch_size',
         default=100,
-        help='DataLoader parameter: how many samples per training batch'
+        help='DataLoader parameter: how many samples per training batch',
     )
     parser.add_argument(
         '--num_workers',
         default=6,
-        help='DataLoader parameter: # of subprocesses to use for data loading.'
+        help='DataLoader parameter: # of subprocesses to use for data loading',
     )
 
     parser.set_defaults(main_func=cnn)
@@ -73,17 +79,31 @@ def add_linear_subparser(subparsers):
 
 
 ###############################################################################
-#                /\ ARG PARSING | CUSTOM DIRECTORY ACTION \/                  #
+#                    /\ ARG PARSING | CUSTOM ACTIONS \/                       #
 ###############################################################################
+
+
+def pack_loader_params(arguments):
+    """Certain arguments are used solely in initializing a DataLoader
+    object from the PyTorch library. Grouping them together here so they
+    can be used by specifying **args.loader_params."""
+
+    loader_params = {}
+    for argname, value in vars(arguments).items():
+        if argname in DataLoader.__init__.__code__.co_varnames:
+            loader_params[argname] = value
+
+    setattr(arguments, "loader_params", loader_params)
+    for argname, value in loader_params.items():
+        delattr(arguments, argname)
+
+    return arguments
 
 
 class FindHDF5InDir(argparse.Action):
     """Get paths for relevant h5 files stored within data directory."""
 
     def __call__(self, parser, namespace, values, option_string=None):
-        if isinstance(values, list):
-            raise RuntimeError('Only one data directory may be passed.')
-
         training_dataset = find_n_files(values, "train", "h5", n=1)
         testing_dataset = find_n_files(values, "test", "h5", n=1)
 
