@@ -93,9 +93,10 @@ def pack_loader_params(arguments):
         if argname in DataLoader.__init__.__code__.co_varnames:
             loader_params[argname] = value
 
-    setattr(arguments, "loader_params", loader_params)
-    for argname, value in loader_params.items():
-        delattr(arguments, argname)
+    if len(loader_params) > 0:
+        setattr(arguments, "loader_params", loader_params)
+        for argname, value in loader_params.items():
+            delattr(arguments, argname)
 
     return arguments
 
