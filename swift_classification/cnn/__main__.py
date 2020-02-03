@@ -1,5 +1,5 @@
 from .dataset_prep import HDF5Dataset, train_val_split
-from .image_processing import Decode, Resize
+from swift_classification.image_processing import Decode, Resize
 
 
 def main(args):
