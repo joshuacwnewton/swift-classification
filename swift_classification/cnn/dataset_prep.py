@@ -4,25 +4,9 @@ import copy
 # dependency imports
 import h5py
 import numpy as np
-import cv2
 import torch
 from torch.utils import data
 from torch.utils.data import SubsetRandomSampler
-
-# project imports
-from swift_classification.cnn.image_processing import Decode, Resize
-
-
-def load_datasets(training_path, testing_path):
-    # Transforms to be applied across datasets
-    decoder = Decode(flags=cv2.IMREAD_COLOR)
-    resizer = Resize(output_size=24)
-
-    # Create and load datasets from .h5 files using custom dataset class
-    train_set = HDF5Dataset(training_path, transform=[decoder, resizer])
-    test_set = HDF5Dataset(testing_path, transform=[decoder, resizer])
-
-    return train_set, test_set
 
 
 class HDF5Dataset(data.Dataset):

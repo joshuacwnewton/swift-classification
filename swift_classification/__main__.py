@@ -3,7 +3,6 @@ from swift_classification.linear.__main__ import main as linear
 
 from glob import glob
 import argparse
-import sys
 from pathlib import Path
 from torch.utils.data import DataLoader
 
@@ -33,6 +32,7 @@ def add_cnn_subparser(subparsers):
         help='The directory containing train/test datasets',
         action=FindHDF5InDir
     )
+
     parser.add_argument(
         '--num_folds',
         default=5,
@@ -49,16 +49,28 @@ def add_cnn_subparser(subparsers):
         help='Number of epochs to train classifier over'
     )
 
-    parser.add_argument_group("DataLoader Parameters")
-    parser.add_argument(
+    transform_params = parser.add_argument_group("Dataset Transform Params")
+    transform_params.add_argument(
+        '--imread_mode',
+        default=1,  # 1 == cv2.IMREAD_COLOR
+        help='Number of subprocesses to use for data loading',
+    )
+    transform_params.add_argument(
+        '--resize_dim',
+        default=(24, 24),
+        help='Size of image after resizing',
+    )
+
+    loader_params = parser.add_argument_group("DataLoader Parameters")
+    loader_params.add_argument(
         '--batch_size',
         default=100,
-        help='DataLoader parameter: how many samples per training batch',
+        help='Number of training samples per training batch',
     )
-    parser.add_argument(
+    loader_params.add_argument(
         '--num_workers',
         default=6,
-        help='DataLoader parameter: # of subprocesses to use for data loading',
+        help='Number of subprocesses to use for data loading',
     )
 
     parser.set_defaults(main_func=cnn)

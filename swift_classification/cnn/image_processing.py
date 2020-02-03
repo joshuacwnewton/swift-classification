@@ -30,8 +30,10 @@ class Resize(object):
     """
 
     def __init__(self, output_size):
-        assert isinstance(output_size, int)
-        self.dim = (output_size, output_size)
+        if isinstance(output_size, int):
+            self.dim = (output_size, output_size)
+        elif isinstance(output_size, tuple):
+            self.dim = output_size
 
     def __call__(self, img):
         return transform.resize(img, self.dim)
