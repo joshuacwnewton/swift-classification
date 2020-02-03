@@ -87,6 +87,34 @@ def add_linear_subparser(subparsers):
         action=FindHDF5InDir
     )
 
+    parser.add_argument(
+        '--num_folds',
+        default=5,
+        help='Number of subportions for training/validation split'
+    )
+    parser.add_argument(
+        '--cross_val',
+        action='store_false',
+        help='Whether cross-validation should be performed'
+    )
+    parser.add_argument(
+        '--num_epochs',
+        default=100,
+        help='Number of epochs to train classifier over'
+    )
+
+    loader_params = parser.add_argument_group("Normalization Parameters")
+    loader_params.add_argument(
+        '--mean',
+        default=0,
+        help='Number of training samples per training batch',
+    )
+    loader_params.add_argument(
+        '--std',
+        default=1,
+        help='Number of subprocesses to use for data loading',
+    )
+
     parser.set_defaults(main_func=linear)
 
 
