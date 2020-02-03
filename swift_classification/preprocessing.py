@@ -1,5 +1,6 @@
 import cv2
 from skimage import transform
+from skimage.feature import hog
 
 
 class Decode(object):
@@ -37,3 +38,11 @@ class Resize(object):
 
     def __call__(self, img):
         return transform.resize(img, self.dim)
+
+
+class HOG(object):
+    def __init__(self):
+        pass  # Using defaults params for now, may change later
+
+    def __call__(self, img):
+        return hog(img)
