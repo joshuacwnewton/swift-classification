@@ -16,7 +16,8 @@ import copy
 def main(training_path, testing_path):
     # TODO: Split config off into separate functions
     num_folds = 5
-    num_epochs = 50
+    num_epochs = 2
+    cross_val = True
     loader_params = {'batch_size': 100, 'num_workers': 6}
 
     # Transforms to be applied across datasets
@@ -27,8 +28,8 @@ def main(training_path, testing_path):
     train_set = HDF5Dataset(training_path, transform=[decoder, resizer])
 
     # Use generator function to iterate through cross-validation splits
-    for train_loader, val_loader in n_fold_cross_val(train_set, num_folds,
-                                                     loader_params):
+    for train_loader, val_loader in train_val_split(train_set, num_folds,
+                                                    loader_params, cross_val):
         for i_epoch in range(num_epochs):
             for x_batch, y_batch in train_loader:
                 pass
@@ -39,10 +40,15 @@ def main(training_path, testing_path):
     test_loader = data.DataLoader(test_set, shuffle=True, **loader_params)
 
 
-def n_fold_cross_val(dataset, num_folds, loader_params):
+def train_val_split(dataset, num_folds, loader_params, cross_val=False):
     """Generator function that returns training and validation DataLoaders.
-    Each time the generator is called, a different fold will be designated
-    as the validation fold."""
+    If cross_val is specified, then each time the generator is called, a
+    different fold will be designated as the validation fold."""
+
+    if cross_val:
+        va_fold_nums = np.arange(num_folds)  # All available for validation
+    else:
+        va_fold_nums = np.arange(1)  # Use only the first fold for validation
 
     # Create folds containing shuffled indices
     all_folds = np.array(
@@ -52,18 +58,19 @@ def n_fold_cross_val(dataset, num_folds, loader_params):
     # Create copy of loader params so "batch_size" can be overridden for val
     val_loader_params = copy.deepcopy(loader_params)
 
-    for i_fold, fold in enumerate(all_folds):
+    for va_fold_num in va_fold_nums:
         # Use current fold for validation loader
-        val_loader_params["batch_size"] = len(fold)
+        val_idxs = all_folds[va_fold_num]
+        val_loader_params["batch_size"] = len(val_idxs)
         val_loader = data.DataLoader(dataset, **val_loader_params,
-                                     sampler=SubsetRandomSampler(fold))
+                                     sampler=SubsetRandomSampler(val_idxs))
 
         # Use all folds BUT current fold for training loader
-        other_folds = np.concatenate(
-            all_folds[np.delete(np.arange(num_folds), i_fold)]
+        train_idxs = np.concatenate(
+            all_folds[np.delete(np.arange(num_folds), va_fold_num)]
         )
         train_loader = data.DataLoader(dataset, **loader_params,
-                                       sampler=SubsetRandomSampler(other_folds))
+                                       sampler=SubsetRandomSampler(train_idxs))
 
         yield train_loader, val_loader
 
@@ -120,7 +127,6 @@ class HDF5Dataset(data.Dataset):
 
 
 def find_files(directory, name, ext, recursive=False):
-
     if recursive:
         files = sorted(glob(f'{directory}/**/*{name}*.{ext}'))
     else:
