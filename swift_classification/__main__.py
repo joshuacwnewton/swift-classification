@@ -94,7 +94,7 @@ def add_linear_subparser(subparsers):
     )
     parser.add_argument(
         '--cross_val',
-        action='store_false',
+        action='store_true',
         help='Whether cross-validation should be performed'
     )
     parser.add_argument(
