@@ -148,6 +148,6 @@ def parse_args(args=sys.argv[1:]):
     return parser.parse_args(args)
 
 
-if __name__ is "__main__":
+if __name__ == "__main__":
     args = parse_args()
     main(args)
