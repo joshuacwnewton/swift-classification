@@ -131,6 +131,22 @@ def export_set(output_dir, name, data, labels, classes):
     f.close()
 
 
+def visualize_images(output_dir, images, labels, metadata):
+    """Copy images to class directories, and rename files based on
+    metadata."""
+
+    output_dir = output_dir/"visualizations"
+    Path.mkdir(output_dir, parents=True)
+
+    for image, (index, row), meta in zip(images, labels.iterrows(), metadata):
+        for label, value in row.iteritems():
+            if not Path.exists(output_dir/f"{label}{value}"):
+                Path.mkdir(output_dir/f"{label}{value}")
+
+            cv2.imwrite(str(output_dir/f"{label}{value}"/
+                            (meta[0]+"_"+meta[1]+".png")), image)
+
+
 ###############################################################################
 #                ABOVE: IMAGE HANDLING | BELOW: ARG PARSING                   #
 ###############################################################################
