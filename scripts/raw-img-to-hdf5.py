@@ -1,25 +1,18 @@
 """
     Utility script to pack raw, labeled images into HDF5 container.
-
-    Requires images to be structured in the following format:
-
-    <root directory>
-        |-- class1
-            |-- img1.png
-            |-- img2.png
-        |-- class2
-            |-- img1.png
-            |-- img2.png
-
+    Requires corresponding csv file with labels to pack.
 """
 
-# Image loading imports
+# Image/label loading imports
 import os
 import sys
 import argparse
 import glob
 import re
 import cv2
+from pathlib import Path
+import pandas as pd
+from natsort import natsorted
 
 # Image splitting/packing imports
 from sklearn.model_selection import train_test_split
@@ -29,37 +22,74 @@ from datetime import datetime
 
 
 def main(args):
-    X, y, class_names = load_images(args.input, encoding=".png")
+    # Create unique directory based on time so .h5 files not overwritten
+    output_dir = Path(f"{os.path.dirname(args.input)}"
+                      f"/datasets/{datetime.now()}")
+    Path.mkdir(output_dir, parents=True)
 
-    X_train, X_test, y_train, y_test = split_dataset(X, y,
+    # Load images as matrices and as encoded bytestreams
+    X, X_encoded, filenames = load_data(f"{args.input}/images")
+
+    # Load corresponding labesl and metadata from csv files
+    metadata, y = load_labels(args.input, filenames, args.classes)
+
+    # Split dataset and export to HDF5 files
+    X_train, X_test, y_train, y_test = split_dataset(X_encoded, y,
                                                      train_size=args.split[0],
                                                      test_size=args.split[1])
+    export_set(output_dir, "training", X_train, y_train, classes=args.classes)
+    export_set(output_dir, "testing", X_test, y_test, classes=args.classes)
 
-    # Create unique directory based on time so .h5 files not overwritten
-    output_dir = f"{os.path.dirname(args.input)}/{datetime.now()}"
-    os.mkdir(output_dir)
-
-    export_set(output_dir, "training", X_train, y_train, classes=class_names)
-    export_set(output_dir, "testing", X_test, y_test, classes=class_names)
+    # Export images to class folders for visualization
+    if args.visual:
+        visualize_images(output_dir, X, y, metadata)
 
 
-def load_images(root_dir, encoding=".png"):
-    """Load all images (assumed to be stored in class subdirectories)
-    into paired image/label sets."""
-    filepaths = glob.glob(root_dir + "/**/*.png", recursive=True)
+def load_data(data_dir, encoding=".png"):
+    """Load images in two forms: matrix form, and encoded bytestream."""
+
+    filepaths = natsorted(glob.glob(f"{data_dir}/*.png"))
 
     # Choose pattern such that parent directory names are used as class labels
-    pattern = re.compile(r"^.*\/(.+)\/[^\/]*.png$")
+    pattern = re.compile(r"^.+\/([^\/]+.png)$")
     matches = [pattern.match(f) for f in filepaths]
 
-    images = [cv2.imread(m.group(0)) for m in matches if m is not None]
-    images = [cv2.imencode(encoding, i)[1] for i in images]
+    images = [cv2.imread(m.group(0)) for m in matches if (m is not None)]
+    encoded_images = [cv2.imencode(encoding, i)[1] for i in images]
 
-    labels = [m.group(1) for m in matches if m is not None]
-    class_names = list(set(labels))
-    labels = [class_names.index(label) for label in labels]
+    filenames = [m.group(1) for m in matches if (m is not None)]
 
-    return images, labels, class_names
+    return images, encoded_images, filenames
+
+
+def load_labels(root_dir, filenames, classes):
+    """Load labels as one-hot integer vectors from specified csv
+    file. Also treat first two rows as metadata."""
+
+    csv_filepath = glob.glob(f"{root_dir}/*.csv")[0]
+    df_labels = pd.read_csv(csv_filepath, index_col="filename")
+
+    assert len(filenames) == len(df_labels)
+
+    # Assume any missing values are no by default
+    df_labels = df_labels.fillna("no")
+
+    for filename in filenames:
+        # Get series corresponding to image file
+        row_label = df_labels.loc[filename]
+
+        # Convert label strings ('no', 'yes', etc.) into integers
+        # ('0', '1', etc.) using mapping
+        row_num = np.array([classes[l][v] if (l in classes.keys()) else v
+                            for l, v in row_label.iteritems()])
+
+        # Store integer labels into new dataframe
+        df_labels.loc[filename] = row_num
+
+    metadata = df_labels.values[:, :2]
+    df_labels = df_labels.drop(columns=["src_vid", "segment_id"]).astype(int)
+
+    return metadata, df_labels
 
 
 def split_dataset(X, y, train_size, test_size):
@@ -71,8 +101,7 @@ def split_dataset(X, y, train_size, test_size):
     # Split dataset into "validation set" and "the rest"
     X_train, X_test, y_train, y_test = train_test_split(X, y,
                                                         test_size=test_size,
-                                                        train_size=train_size,
-                                                        stratify=y)
+                                                        train_size=train_size)
 
     assert len(X) == len(X_train) + len(X_test)
     assert len(y) == len(y_train) + len(y_test)
@@ -116,9 +145,10 @@ class DirectoryAction(argparse.Action):
             raise NotADirectoryError("Specified directory does not exist.")
 
         for fname in os.listdir(values):
-            if not os.path.isdir(os.path.join(values, fname)):
-                raise AssertionError("Expected class subdirectories only"
-                                     "within provided root directory.")
+            if ((not Path(f"{values}/{fname}").is_dir())
+                 and (Path(fname).suffix != ".csv")):
+                raise RuntimeError("Directory must only contain subdirectories"
+                                   " and csv files.")
 
         setattr(namespace, self.dest, values)
 
@@ -144,6 +174,20 @@ def parse_args(args=sys.argv[1:]):
                         help="Percentage split between train+val and test",
                         nargs=2,
                         action=SplitAction)
+    parser.add_argument("--classes",
+                        help="Config for class mapping. Don't input manually!",
+                        default={
+                            "keep": {"no": 0, "yes": 1},
+                            "swift": {"no": 0, "1": 1, "2": 2, "3+": 3},
+                            "blurry": {"no": 0, "yes": 1},
+                            "chimney": {"no": 0, "yes": 1},
+                            "antennae": {"no": 0, "yes": 1},
+                            "non-swift": {"no": 0, "crow": 1,
+                                          "seagull": 2, "other": 3}
+                        })
+    parser.add_argument("--visual",
+                        help="Flag to export class visualizations",
+                        action="store_true")
 
     return parser.parse_args(args)
 
