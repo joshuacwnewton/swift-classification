@@ -1,12 +1,8 @@
-# stdlib imports
-import copy
-
 # dependency imports
 import h5py
 import numpy as np
 import torch
 from torch.utils import data
-from torch.utils.data import SubsetRandomSampler
 
 
 class HDF5Dataset(data.Dataset):
@@ -18,10 +14,11 @@ class HDF5Dataset(data.Dataset):
         required 'data' dataset in the .h5 file. (default=None)
     """
 
-    def __init__(self, file_path, transform=None):
+    def __init__(self, file_path, transform=None, subset=None):
         super().__init__()
         self.file_path = file_path
         self.transform = transform
+        self.subset_indices = subset
 
         required_datasets = ["data", "label"]
         with h5py.File(self.file_path, "r") as h5_file_ptr:
@@ -30,12 +27,17 @@ class HDF5Dataset(data.Dataset):
                     raise RuntimeError(f'File missing required "{ds}" dataset')
 
     def __len__(self):
-        with h5py.File(self.file_path, "r") as h5_file_ptr:
-            return h5_file_ptr["data"][()].shape[0]
+        if self.subset_indices is not None:
+            ds_length = len(self.subset_indices)
+        else:
+            with h5py.File(self.file_path, "r") as h5_file_ptr:
+                ds_length = h5_file_ptr["data"][()].shape[0]
+
+        return ds_length
 
     def __getitem__(self, index):
-        if torch.is_tensor(index):
-            index = index.tolist()
+        if self.subset_indices is not None:
+            index = self.subset_indices[index]
 
         with h5py.File(self.file_path, "r") as h5_file_ptr:
             x = np.array(h5_file_ptr["data"][index])
@@ -47,14 +49,21 @@ class HDF5Dataset(data.Dataset):
         elif self.transform:
             raise RuntimeError('Transform names must be provided by list.')
 
-        return torch.from_numpy(x), torch.from_numpy(y)
+        y = torch.from_numpy(y)
+        if len(y) > 1:
+            y = y[0]
+
+        return x, y
 
 
-def train_val_split(dataset, num_folds, loader_params, cross_val=False):
+def train_val_idx_split(h5_path, num_folds, cross_val=False):
     """Generator function that returns training and validation
-    DataLoaders. If cross_val is specified, then each time the generator
+    indexes. If cross_val is specified, then each time the generator
     is called, a different fold will be designated as the validation
     fold."""
+
+    with h5py.File(h5_path, "r") as h5_file_ptr:
+        length = h5_file_ptr["data"][()].shape[0]
 
     if cross_val:
         va_fold_nums = np.arange(num_folds)  # All available for validation
@@ -63,24 +72,16 @@ def train_val_split(dataset, num_folds, loader_params, cross_val=False):
 
     # Create folds containing shuffled indices
     all_folds = np.array(
-        np.array_split(np.random.permutation(len(dataset)), num_folds)
+        np.array_split(np.random.permutation(length), num_folds)
     )
-
-    # Create copy of loader params so "batch_size" can be overridden for val
-    val_loader_params = copy.deepcopy(loader_params)
 
     for va_fold_num in va_fold_nums:
         # Use current fold for validation loader
         val_idxs = all_folds[va_fold_num]
-        val_loader_params["batch_size"] = len(val_idxs)
-        val_loader = data.DataLoader(dataset, **val_loader_params,
-                                     sampler=SubsetRandomSampler(val_idxs))
 
         # Use all folds BUT current fold for training loader
         train_idxs = np.concatenate(
             all_folds[np.delete(np.arange(num_folds), va_fold_num)]
         )
-        train_loader = data.DataLoader(dataset, **loader_params,
-                                       sampler=SubsetRandomSampler(train_idxs))
 
-        yield train_loader, val_loader
+        yield train_idxs, val_idxs
