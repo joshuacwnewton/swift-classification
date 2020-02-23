@@ -1,19 +1,280 @@
 from .dataset_prep import HDF5Dataset, train_val_split
-from swift_classification.preprocessing import Decode, Resize
+from swift_classification.preprocessing import Decode
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import numpy as np
+from torchvision import models, transforms
+import copy
+from .dataset_prep import HDF5Dataset, train_val_idx_split
+from torch.utils import data
+from sklearn.metrics import confusion_matrix, classification_report, balanced_accuracy_score
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 def main(args):
-    transforms = [Decode(flags=args.imread_mode),
-                  Resize(output_size=args.resize_dim)]
-    train_set = HDF5Dataset(args.train_path, transforms)
-    test_set = HDF5Dataset(args.test_path, transforms)
+    # Step 1: Initialize
+    model, optimizer, criterion = setup(args)
 
-    for train_loader, val_loader in train_val_split(train_set,
+    # Step 2: Fetch DataLoaders for training/validation/test datasets
+    train_loader, val_loader, test_loader = get_data_loaders(args)
+
+    # Step 3: Find best trained model over a number of epochs
+    best_model = copy.deepcopy(model.state_dict())
+    best_metric = 0.0
+    for epoch in range(args.num_epochs):
+        model, train_metric = train_model(model, optimizer, criterion,
+                                          train_loader)
+        print(f"Epoch {epoch}, training. Balanced accuracy  : {train_metric}")
+
+        model, val_metric = validate_model(model, optimizer, criterion,
+                                           val_loader)
+        print(f"Epoch {epoch}, validation. Balanced accuracy: {val_metric}")
+
+        if val_metric > best_metric:
+            best_metric = val_metric
+            best_model = copy.deepcopy(model.state_dict())
+
+    # Step 4: Test best model on training dataset
+    model.load_state_dict(best_model)
+    test_model(model, test_loader)
+
+
+def setup(args):
+    """Create model, optimizer, and criterion objects based on proved
+    arguments."""
+
+    # Call model constructor
+    model = models.squeezenet1_0(pretrained=True)
+
+    # Freeze layer parameters if feature extracting
+    if args.feature_extract:
+        for param in model.parameters():
+            param.requires_grad = False
+
+    # Reshape output layer: (512, 1000) -> (512, 2)
+    # This will also unfreeze this layer's parameters, as the default value for
+    # (weight/bias).required_grad = True
+    model.classifier[1] = nn.Conv2d(512, args.num_classes, kernel_size=1)
+
+    # Update class attribute
+    model.num_classes = args.num_classes
+
+    # Send the model to GPU
+    model = model.to(device)
+
+    # Create list of parameters that should be updated (must be done after
+    # freezing, and after last layer is reshaped).
+    params_to_update = [p for p in model.parameters()
+                        if p.requires_grad is True]
+
+    # Initialize optimizer
+    optimizer = optim.SGD(params_to_update, lr=args.learning_rate,
+                          momentum=args.momentum)
+
+    # Initialize loss function
+    criterion = nn.CrossEntropyLoss()
+
+    return model, optimizer, criterion
+
+
+def get_data_loaders(args):
+    """Get dataloaders for training/validation/test split."""
+
+    # Initialize image transforms for Dataset class
+    data_transforms = [
+        Decode(flags=args.imread_mode),
+        transforms.ToPILImage(),
+        transforms.Resize(args.small_input_size),
+        transforms.Pad((args.input_size[0] - args.small_input_size[0])//2),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ]
+
+    # Get indices for training/validation split -> Dataset -> DataLoader
+    train_idxs, val_idxs = next(train_val_idx_split(args.train_path,
                                                     args.num_folds,
-                                                    args.loader_params,
-                                                    args.cross_val):
-        for i_epoch in range(args.num_epochs):
-            for x_batch, y_batch in train_loader:
-                pass
+                                                    args.cross_val))
+    train_set = HDF5Dataset(args.train_path, data_transforms,
+                            subset=train_idxs)
+    val_set = HDF5Dataset(args.train_path, data_transforms, subset=val_idxs)
+    train_loader = data.DataLoader(train_set, **args.loader_params)
+    val_loader = data.DataLoader(val_set, **args.loader_params)
 
-            x_val, y_val = next(iter(val_loader))
+    # Use full test dataset for testing -> Dataset -> DataLoader
+    test_set = HDF5Dataset(args.test_path, data_transforms)
+    args.loader_params["batch_size"] = 1
+    test_loader = data.DataLoader(test_set, **args.loader_params)
+
+    return train_loader, val_loader, test_loader
+
+
+def train_model(model, optimizer, criterion, train_loader):
+    """Train model using training set."""
+
+    # Prepare model and autograd for training
+    model.train()
+
+    # Iterate through mini-batches in training DataLoader
+    y, y_pred = [], []
+    for X_batch, y_batch in train_loader:
+        # Send the inputs and labels to GPU
+        X_batch = X_batch.to(device)
+        y_batch = y_batch.to(device)
+
+        # Zero the parameter gradients
+        optimizer.zero_grad()
+
+        with torch.set_grad_enabled(True):
+            # Calculate output scores and loss for the batch
+            scores_batch = model(X_batch)
+            loss_batch = criterion(scores_batch, y_batch)
+
+            # Generate predictions
+            _, y_pred_batch = torch.max(scores_batch, 1)
+
+            # Apply backpropagation
+            loss_batch.backward()
+
+            # Update the optimizer
+            optimizer.step()
+
+        # Append batch values to epoch tracker
+        y.append(y_batch.cpu().numpy())
+        y_pred.append(y_pred_batch.cpu().numpy())
+
+    # Convert list of Tensors to single numpy arrays
+    y = np.concatenate(y)
+    y_pred = np.concatenate(y_pred)
+
+    # Compute performance metric for training set
+    train_metric = balanced_accuracy_score(y, y_pred)
+
+    return model, train_metric
+
+
+def validate_model(model, optimizer, criterion, val_loader):
+    """Validate model using validation set."""
+    # Prepare model and autograd for validation
+    model.eval()
+
+    # Iterate through mini-batches in testing DataLoader
+    X, y, y_pred, loss = [], [], [], []
+    for X_batch, y_batch in val_loader:
+        # Send the inputs and labels to GPU
+        X_batch = X_batch.to(device)
+        y_batch = y_batch.to(device)
+
+        # Zero the parameter gradients
+        optimizer.zero_grad()
+
+        with torch.set_grad_enabled(False):
+            # Calculate output scores and loss
+            scores_batch = model(X_batch)
+            loss_batch = criterion(scores_batch, y_batch)
+
+            # Generate predictions
+            _, y_pred_batch = torch.max(scores_batch, 1)
+
+        # Append batch values to epoch tracker
+        X.append(X_batch)
+        y.append(y_batch)
+        y_pred.append(y_pred_batch)
+        loss.append(loss_batch)
+
+    # Convert list of Tensors to single numpy arrays
+    y = torch.cat(y).cpu().numpy()
+    y_pred = torch.cat(y_pred).cpu().numpy()
+
+    # Compute performance metric for validation set
+    val_metric = balanced_accuracy_score(y, y_pred)
+
+    return model, val_metric
+
+
+def test_model(model, test_loader):
+    """Test model using testing set."""
+
+    X, y, y_pred = [], [], []
+    for X_batch, y_batch in test_loader:
+        X_batch = X_batch.to(device)
+        y_batch = y_batch.to(device)
+
+        # Calculate output scores
+        scores_batch = model(X_batch)
+
+        # Generate predictions
+        _, y_pred_batch = torch.max(scores_batch, 1)
+
+        # Append batch values to test tracker
+        X.append(X_batch)
+        y.append(y_batch)
+        y_pred.append(y_pred_batch)
+
+    print("Results for test set: ")
+    print(confusion_matrix(y, y_pred))
+    print(classification_report(y, y_pred))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

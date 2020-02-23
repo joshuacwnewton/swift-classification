@@ -1,4 +1,4 @@
-from swift_classification.cnn.__main__ import main as cnn
+from swift_classification.cnn.__main__ import rewritten_main as cnn
 from swift_classification.linear.__main__ import main as linear
 
 from glob import glob
@@ -12,6 +12,10 @@ def parse_args():
         description='Configuration loader for classifiers'
     )
 
+    subparsers = parser.add_subparsers(help='sub-command help')
+    add_cnn_subparser(subparsers)
+    add_linear_subparser(subparsers)
+
     transform_params = parser.add_argument_group("Dataset Transform Params")
     transform_params.add_argument(
         '--imread_mode',
@@ -19,14 +23,15 @@ def parse_args():
         help='Number of subprocesses to use for data loading',
     )
     transform_params.add_argument(
-        '--resize_dim',
+        '--small_input_size',
         default=(24, 24),
         help='Size of image after resizing',
     )
-
-    subparsers = parser.add_subparsers(help='sub-command help')
-    add_cnn_subparser(subparsers)
-    add_linear_subparser(subparsers)
+    parser.add_argument(
+        '--cross_val',
+        action='store_true',
+        help='Whether cross-validation should be performed'
+    )
 
     parsed_args = parser.parse_args()
     parsed_args = pack_loader_params(parsed_args)
@@ -44,6 +49,29 @@ def add_cnn_subparser(subparsers):
         help='The directory containing train/test datasets',
         action=FindHDF5InDir
     )
+    parser.add_argument(
+        '--num_classes',
+        default=2,
+    )
+
+    parser.add_argument(
+        '--model',
+        choices=['resnet', 'alexnet', 'vgg', 'squeezenet', 'densenet',
+                 'inception'],
+        default='squeezenet',
+        help='Which pretrained CNN architecture to use'
+    )
+    parser.add_argument(
+        '--input_size',
+        default=(224, 224),
+        help='Input size for specified CNN architecture',
+    )
+    parser.add_argument(
+        '--feature_extract',
+        action='store_true',
+        help="Flag for feature extracting. When False, we fine-tune the whole "
+             "model, when True we only update the reshaped layer params"
+    )
 
     parser.add_argument(
         '--num_folds',
@@ -51,25 +79,32 @@ def add_cnn_subparser(subparsers):
         help='Number of subportions for training/validation split'
     )
     parser.add_argument(
-        '--cross_val',
-        action='store_false',
-        help='Whether cross-validation should be performed'
-    )
-    parser.add_argument(
         '--num_epochs',
-        default=100,
+        default=14,
         help='Number of epochs to train classifier over'
     )
 
     loader_params = parser.add_argument_group("DataLoader Parameters")
     loader_params.add_argument(
         '--batch_size',
-        default=100,
+        default=8,
         help='Number of training samples per training batch',
     )
     loader_params.add_argument(
         '--num_workers',
         default=6,
+        help='Number of subprocesses to use for data loading',
+    )
+
+    loader_params = parser.add_argument_group("Optimizer Parameters")
+    loader_params.add_argument(
+        '--learning_rate',
+        default=0.001,
+        help='Number of training samples per training batch',
+    )
+    loader_params.add_argument(
+        '--momentum',
+        default=0.9,
         help='Number of subprocesses to use for data loading',
     )
 
@@ -91,11 +126,6 @@ def add_linear_subparser(subparsers):
         '--num_folds',
         default=5,
         help='Number of subportions for training/validation split'
-    )
-    parser.add_argument(
-        '--cross_val',
-        action='store_true',
-        help='Whether cross-validation should be performed'
     )
     parser.add_argument(
         '--num_epochs',
