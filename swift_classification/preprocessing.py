@@ -1,6 +1,7 @@
 import cv2
 from skimage import transform
 from skimage.feature import hog
+import numpy as np
 
 
 class Decode(object):
@@ -37,7 +38,8 @@ class Resize(object):
             self.dim = output_size
 
     def __call__(self, img):
-        return transform.resize(img, self.dim)
+        return transform.resize(img, self.dim,
+                                preserve_range=True).astype(np.uint8)
 
 
 class HOG(object):
