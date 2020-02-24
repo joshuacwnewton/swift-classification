@@ -16,7 +16,9 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def main(args):
     # Step 1: Initialize
-    model, optimizer, criterion = setup(args)
+    model, params_to_update = setup_model(args)
+    optimizer = setup_optimizer(args, params_to_update)
+    criterion = setup_criterion(args)
 
     # Step 2: Fetch DataLoaders for training/validation/test datasets
     train_loader, val_loader, test_loader = get_data_loaders(args)
@@ -42,10 +44,9 @@ def main(args):
     test_model(model, test_loader)
 
 
-def setup(args):
-    """Create model, optimizer, and criterion objects based on proved
-    arguments."""
-
+def setup_model(args):
+    """Select CNN architecture, modified for transfer learning on
+    specific dataset."""
     # Call model constructor
     model = models.squeezenet1_0(pretrained=True)
 
@@ -70,14 +71,24 @@ def setup(args):
     params_to_update = [p for p in model.parameters()
                         if p.requires_grad is True]
 
-    # Initialize optimizer
+    return model, params_to_update
+
+
+def setup_optimizer(args, params_to_update):
+    """Select optimizer to modify weights based on losses."""
+
     optimizer = optim.SGD(params_to_update, lr=args.learning_rate,
                           momentum=args.momentum)
 
-    # Initialize loss function
+    return optimizer
+
+
+def setup_criterion(args):
+    """Select loss function for evaluating model predictions."""
+
     criterion = nn.CrossEntropyLoss()
 
-    return model, optimizer, criterion
+    return criterion
 
 
 def get_data_loaders(args):
