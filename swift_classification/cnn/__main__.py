@@ -1,14 +1,16 @@
+import copy
+
 from .dataset_prep import HDF5Dataset, train_val_split
-from swift_classification.preprocessing import Decode
+import numpy as np
+from sklearn.metrics import confusion_matrix, classification_report, \
+    balanced_accuracy_score
+
 import torch
+from torch.utils import data
 import torch.nn as nn
 import torch.optim as optim
-import numpy as np
 from torchvision import models, transforms
-import copy
-from .dataset_prep import HDF5Dataset, train_val_idx_split
-from torch.utils import data
-from sklearn.metrics import confusion_matrix, classification_report, balanced_accuracy_score
+from swift_classification.preprocessing import Decode  # Custom transform
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
@@ -92,9 +94,9 @@ def get_data_loaders(args):
     ]
 
     # Get indices for training/validation split -> Dataset -> DataLoader
-    train_idxs, val_idxs = next(train_val_idx_split(args.train_path,
-                                                    args.num_folds,
-                                                    args.cross_val))
+    train_idxs, val_idxs = next(train_val_split(args.train_path,
+                                                args.num_folds,
+                                                args.cross_val))
     train_set = HDF5Dataset(args.train_path, data_transforms,
                             subset=train_idxs)
     val_set = HDF5Dataset(args.train_path, data_transforms, subset=val_idxs)

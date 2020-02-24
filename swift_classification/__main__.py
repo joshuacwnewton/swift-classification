@@ -1,4 +1,4 @@
-from swift_classification.cnn.__main__ import rewritten_main as cnn
+from swift_classification.cnn.__main__ import main as cnn
 from swift_classification.linear.__main__ import main as linear
 
 from glob import glob

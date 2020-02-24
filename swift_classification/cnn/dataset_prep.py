@@ -56,7 +56,7 @@ class HDF5Dataset(data.Dataset):
         return x, y
 
 
-def train_val_idx_split(h5_path, num_folds, cross_val=False):
+def train_val_split(h5_path, num_folds, cross_val=False):
     """Generator function that returns training and validation
     indexes. If cross_val is specified, then each time the generator
     is called, a different fold will be designated as the validation
