@@ -27,17 +27,22 @@ def main(args):
     best_model = copy.deepcopy(model.state_dict())
     best_metric = 0.0
     for epoch in range(args.num_epochs):
+        # Step 3.a: Train model.
         model, train_metric = train_model(model, optimizer, criterion,
                                           train_loader)
-        print(f"Epoch {epoch}, training. Balanced accuracy  : {train_metric}")
+        print(f"Epoch {epoch} |  Training set  | "
+              f"Balanced accuracy: {train_metric}")
 
+        # Step 3.b: Validate trained model, update if best.
         model, val_metric = validate_model(model, optimizer, criterion,
                                            val_loader)
-        print(f"Epoch {epoch}, validation. Balanced accuracy: {val_metric}")
-
+        print(f"Epoch {epoch} | Validation set | "
+              f"Balanced accuracy: {val_metric}")
         if val_metric > best_metric:
             best_metric = val_metric
             best_model = copy.deepcopy(model.state_dict())
+
+        print("--------------------------------------------------------------")
 
     # Step 4: Test best model on training dataset
     model.load_state_dict(best_model)
