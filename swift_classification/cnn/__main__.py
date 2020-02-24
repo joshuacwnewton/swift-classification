@@ -60,12 +60,10 @@ def setup_model(args):
         for param in model.parameters():
             param.requires_grad = False
 
-    # Reshape output layer: (512, 1000) -> (512, 2)
+    # Modify model to support fewer classes: (512, 1000) -> (512, 2)
     # This will also unfreeze this layer's parameters, as the default value for
     # (weight/bias).required_grad = True
     model.classifier[1] = nn.Conv2d(512, args.num_classes, kernel_size=1)
-
-    # Update class attribute
     model.num_classes = args.num_classes
 
     # Send the model to GPU
@@ -121,7 +119,7 @@ def get_data_loaders(args):
 
     # Use full test dataset for testing -> Dataset -> DataLoader
     test_set = HDF5Dataset(args.test_path, data_transforms)
-    args.loader_params["batch_size"] = 1
+    args.loader_params["batch_size"] = 1  # No minibatches for testing
     test_loader = data.DataLoader(test_set, **args.loader_params)
 
     return train_loader, val_loader, test_loader
