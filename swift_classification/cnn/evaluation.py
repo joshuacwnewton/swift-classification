@@ -1,1 +1,0 @@
-# test_loader = data.DataLoader(test_set, shuffle=True, **loader_params)
