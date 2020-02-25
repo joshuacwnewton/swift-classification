@@ -11,10 +11,120 @@ import torch.nn as nn
 import torch.optim as optim
 from torchvision import models, transforms
 from swift_classification.preprocessing import Decode  # Custom transform
+
+from skorch import NeuralNetClassifier
+from skorch.helper import SliceDataset
+from skorch.callbacks import LRScheduler, Checkpoint, Freezer
+from sklearn.model_selection import GridSearchCV
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 def main(args):
+    # Step 1: Fetch Datasets for training/validation/test datasets
+    train_set, val_set, test_set = get_datasets(args)
+
+    # Step 2: Initialize callbacks for NeuralNetClassifier
+    lrscheduler = LRScheduler(
+        policy='StepLR', step_size=7, gamma=0.1)
+
+    checkpoint = Checkpoint(
+        f_params='best_model.pt', monitor='valid_acc_best')
+
+    freezer = Freezer(lambda x: not x.startswith('model.classifier.1'))
+
+    net = NeuralNetClassifier(
+        TwoClassSqueezeNet,
+        criterion=nn.CrossEntropyLoss,
+        batch_size=args.batch_size,
+        max_epochs=args.num_epochs,
+        module__num_classes=args.num_classes,
+        optimizer=optim.SGD,
+        iterator_train__shuffle=True,
+        iterator_train__num_workers=args.num_workers,
+        iterator_valid__shuffle=True,
+        iterator_valid__num_workers=args.num_workers,
+        # train_split fixes bug in skorch library, see:
+        # https://github.com/skorch-dev/skorch/issues/599
+        train_split=None,
+        device='cuda'  # comment to train on cpu
+    )
+
+    params = {
+            'optimizer__lr': [1e-5, 1e-4, 1e-3],
+            'optimizer__momentum': [0.5, 0.9, 0.99, 0.999],
+            'optimizer__nesterov': [True, False]
+        }
+    gs = GridSearchCV(net, params, refit=False, cv=3, scoring='accuracy',
+                      verbose=10)
+
+    X_sl = SliceDataset(train_set, idx=0)  # idx=0 is the default
+    y_sl = SliceDataset(train_set, idx=1)
+
+    # net.fit(train_set, y=None)
+    gs.fit(X_sl, y_sl)
+    print(gs.best_score_, gs.best_params_)
+
+
+class TwoClassSqueezeNet(nn.Module):
+    """Rewritten setup_model() using object-oriented approach."""
+
+    def __init__(self, num_classes):
+        super().__init__()
+
+        # Replace (512, 1000) output layer with (512, num_classes) layer
+        model = models.squeezenet1_0(pretrained=True)
+        num_ftrs = model.classifier[1].in_channels
+        model.classifier[1] = nn.Conv2d(num_ftrs, num_classes, kernel_size=1)
+        model.num_classes = num_classes
+        model = model.to(device)
+
+        self.model = model
+
+    def forward(self, x):
+        return self.model(x)
+
+
+def get_datasets(args):
+    """Hacky copy/paste to get just Datasets (not DataLoaders).
+
+    I would typically never copy and paste like this, but I am trying to
+    quickly figure out the distinctions between skorch's API and
+    PyTorch's, so quick iteration is helpful.
+
+    Original code in Pure PyTorch section below."""
+
+    # Initialize image transforms for Dataset class
+    data_transforms = [
+        Decode(flags=args.imread_mode),
+        transforms.ToPILImage(),
+        transforms.Resize(args.small_input_size),
+        transforms.Pad((args.input_size[0] - args.small_input_size[0])//2),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ]
+
+    # Get indices for training/validation split -> Dataset
+    train_idxs, val_idxs = next(train_val_split(args.train_path,
+                                                args.num_folds,
+                                                args.cross_val))
+    train_set = HDF5Dataset(args.train_path, data_transforms)
+                            # subset=train_idxs)
+    val_set = HDF5Dataset(args.train_path, data_transforms, subset=val_idxs)
+
+    # Use full test dataset for testing -> Dataset
+    test_set = HDF5Dataset(args.test_path, data_transforms)
+    # args.loader_params["batch_size"] = 1  # No minibatches for testing
+
+    return train_set, val_set, test_set
+
+
+###############################################################################
+#               OLDER (PURE PYTORCH) SQUEEZENET CODE BELOW.                   #
+###############################################################################
+
+
+def old_boilerplate_main(args):
     # Step 1: Initialize
     model, params_to_update = setup_model(args)
     optimizer = setup_optimizer(args, params_to_update)

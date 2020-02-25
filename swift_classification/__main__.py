@@ -1,4 +1,4 @@
-from swift_classification.cnn.__main__ import main as cnn
+from swift_classification.cnn.__main__ import skorch_main as cnn
 from swift_classification.linear.__main__ import main as linear
 
 from glob import glob
@@ -34,7 +34,11 @@ def parse_args():
     )
 
     parsed_args = parser.parse_args()
-    parsed_args = pack_loader_params(parsed_args)
+
+    # This is a quick fix to check out skorch, but if abandoning skorch, this
+    # will need to be uncommented.
+    # TODO: For reminder.
+    # parsed_args = pack_loader_params(parsed_args)
 
     return parsed_args
 
