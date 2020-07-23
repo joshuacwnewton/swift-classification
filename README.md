@@ -1,3 +1,5 @@
+**Please note**: the development of this project was interrupted due to the unprecedented circumstances of COVID-19. The intermediate results of this research are provided for transparency. As this was a project for an undergraduate Honours Thesis, development has ceased, and the author has moved onto future projects. 
+
 ### swift-classification
 
 > A sister project to the previous SwiftWatcher collaboration between the University of Victoria's Computer Vision Lab and Algoma SwiftWatch. Completed by Joshua Newton as part of Honours Thesis during Spring 2020 term.
@@ -12,7 +14,7 @@ Images will be extracted from available source videos using the existing `swiftw
 
 ### Approach
 
-This approach is undergoing active development. Preliminary proposed methods include:
+~~This approach is currently undergoing active development.~~ Preliminary proposed methods include:
  
  1. Haar-like features + AdaBoost classifier
  2. HoG features + SVM classifier
