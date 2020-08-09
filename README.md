@@ -1,4 +1,4 @@
-**Please note**: the development of this project was interrupted due to the unprecedented circumstances of COVID-19. The intermediate results of this research are provided for transparency. As this was a project for an undergraduate Honours Thesis, development has ceased, and the author has moved onto future projects. 
+> **Please note**: the development of this project was interrupted due to the unprecedented circumstances of COVID-19. The intermediate results of this research are provided for transparency. As this was a project for an undergraduate Honours Thesis, development has ceased, and the author has moved onto future projects. 
 
 ### swift-classification
 
